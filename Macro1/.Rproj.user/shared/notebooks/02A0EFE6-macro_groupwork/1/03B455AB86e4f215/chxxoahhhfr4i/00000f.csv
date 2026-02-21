@@ -1,8 +1,0 @@
-"0","# Load Penn World Table"
-"0","pwt <- read_excel(""pwt110.xlsx"", sheet = ""Data"") %>%"
-"0","  mutate(across(where(is.numeric), ~ signif(.x, 4)))"
-"0",""
-"0",""
-"0","# Load World Economic Outlook database for some additional info"
-"0","# (not the entire database, only part of it)"
-"0","weo <- read_csv(""WEO_IMF.csv"")"
