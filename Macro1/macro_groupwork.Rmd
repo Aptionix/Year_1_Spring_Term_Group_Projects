@@ -1,15 +1,20 @@
 ---
 title: "Macroeconomics 1 Group Presentation"
-output: pdf_document
-author: 'Group C4'
+author: "Group C4"
+output:
+  pdf_document: default
+  word_document: default
 ---
 ```{r Libraries, message = F}
 knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
 library(tidyverse)
 library(ggplot2)
 library(readr)
 library(readxl)
 library(ggpubr)
+library(knitr)
 ```
 
 ```{r load datasets, message = F}
@@ -31,7 +36,11 @@ pwt <- pwt %>%
   na.omit() %>%
   mutate(rgdpna_pc = rgdpna / pop) %>%
   mutate(rnna_pc = rnna / pop)
+```
 
+
+# Question 2
+```{r question 2}
 pwt_pop_emp <- pwt %>%
   select(year, countrycode, pop, emp, avh, hc) %>%
   pivot_longer(cols = -c(year, countrycode), values_to = "Value", names_to = "Indicator")
@@ -39,11 +48,7 @@ pwt_pop_emp <- pwt %>%
 pwt_capital <- pwt %>%
   select(year, countrycode, rnna, rnna_pc, rgdpna_pc, rgdpna, rtfpna, delta) %>%
   pivot_longer(cols = -c(year, countrycode), values_to = "Value", names_to = "Indicator")
-```
 
-
-# Question 2
-```{r question 2}
 # ---- Population & Employment -----
 pwt_pop_emp %>%
   filter(countrycode == "IRL", Indicator %in% c("emp", "pop")) %>%
@@ -51,9 +56,10 @@ pwt_pop_emp %>%
   geom_line() +
   geom_point(alpha = 0.2, size = 1) +
   theme_minimal() +
-  scale_color_manual(values = c("#0072B2", "#E69F00")) +
+  scale_colour_discrete(labels = c("Engagement", "Population")) +
   labs(
-    y = "Population (millions)", x = "Year"
+    y = "Population (millions)", x = "Year",
+    title = "Population and Engagement in Ireland (1970-2021)"
   )
 
 
@@ -64,6 +70,7 @@ line_plot_1 <- function(data, indicator, ylab) {
     geom_line() +
     geom_point(alpha = 0.2, size = 1) +
     scale_color_manual(values = c("#1F77FF", "#FF7F0E", "#2CA02C")) +
+    scale_colour_discrete(name = "Country") +
     theme_minimal() +
     labs(x = "Year", y = ylab)
 }
@@ -102,7 +109,10 @@ ggarrange(capital_stock, rgdp_pc,
 From the previous 4 graphs, we can primarily see the following happened in Ireland:
 
 1. There is a constant increasing rate in population and HCI growth rate;
-2. There is a higher 
+2. There is a higher falling rate in average working hours in the earlier period (1970-2000) than in the later period (2000-2021);
+3. There is a higher TFP growth rate in the earlier period (1970-2000), nd remained high and fluctuated in the later period;
+4. Capital stock is rising approximately at the same rate as GDP, while capital stock is not as responsive to the fall in GDP, which suggest that there could be some lags in the adjustment of capital stock to changes in GDP.
+5. After 2015, the depreciation rate rise dramatically.
 
 
 Then we want to see how accurate was the Solow model in estimating the GDP in Ireland.
@@ -118,15 +128,14 @@ output level by the Solow model.
 ```{r Solow Model}
 pwt <- pwt %>%
   mutate(
-    rgdpna_pc_adjust_A = rgdpna_pc / rtfpna,
-    y_0.44 = (rnna_pc * 10^6)^(0.44),
-    y_0.43 = (rnna_pc * 10^6)^(0.43)
+    y_0.44 = rtfpna * (rnna_pc * 10^6)^(0.44),
+    y_0.43 = rtfpna * (rnna_pc * 10^6)^(0.43)
   ) %>%
   mutate(across(where(is.numeric), ~ signif(.x, 4)))
 
 
 pwt_solow <- pwt %>%
-  select(year, countrycode, y_0.43, y_0.44, rgdpna_pc_adjust_A) %>%
+  select(year, countrycode, y_0.43, y_0.44, rgdpna_pc) %>%
   filter(countrycode == "IRL") %>%
   pivot_longer(cols = -c(year, countrycode), values_to = "value", names_to = "indicator")
 
@@ -137,11 +146,85 @@ pwt_solow %>% ggplot(aes(x = year, y = value, colour = indicator)) +
 ```
 
 The above graph shows that the Solow model with $\alpha = 0.43$ is a good estimation
-of the actual per capita GDP during 1970 to around 2000, and Solow model with 
-$\alpha = 0.44$ is a good estimation of the actual per capita GDP during 2000 to 
-2008, which suggest that the capital share in Ireland was around 43% in the earlier period and
-increased to around 44% in the later period. However, after 2010, both models fail to capture the
-actual per capita GDP, which could be due to various factors such as changes in technology, labor
-market dynamics, or other macroeconomic shocks that are not accounted for in the Solow model.
+of the actual per capita GDP during 1970 to around 2015, while the model with $\alpha = 0.44$ well estimated the actual per capita GDP from around 2020 onwards. however, the model fell to capture some short term fluctuations in the actual per capita GDP, such as 2000-2010 and 2015-2020. This may be due to a rapid improvement in technology or a rapid increase in capital stock during these periods, which are not explained by the Solow model.
 
-For example, in 2008, the 
+We then find the contribution of capital and TFP to the growth of the per capita GDP growth. We use $\alpha = 0.43$ for 1970-2015, and $\alpha = 0.44$ for the following period.
+
+```{r growth accounting}
+pwt_growth <- pwt %>%
+  filter(countrycode == "IRL") %>%
+  select(year, rnna, rtfpna, rgdpna, pop) %>%
+  mutate(
+    growth_capital = ifelse(year <= 2015, 0.43 * (rnna / lag(rnna) - 1) * 100, 0.44 * (rnna / lag(rnna) - 1) * 100),
+    growth_population = ifelse(
+      year <= 2015,
+      (1 - 0.43) * (pop / lag(pop) - 1) * 100,
+      (1 - 0.44) * (pop / lag(pop) - 1) * 100
+    ),
+    growth_tfp = (rtfpna / lag(rtfpna) - 1) * 100,
+    growth_output = (rgdpna / lag(rgdpna) - 1) * 100
+  ) %>%
+  select(year, growth_capital, growth_population, growth_tfp, growth_output) %>%
+  mutate(
+    across(
+      -year,
+      ~ if (is.numeric(.x)) round(.x, 2)
+    )
+  ) %>%
+  mutate(
+    max_contributor = names(.)[2:4][max.col(across(2:4))]
+  )
+
+pwt_growth_pc <- pwt %>%
+  filter(countrycode == "IRL") %>%
+  select(year, rnna_pc, rtfpna, rgdpna_pc) %>%
+  mutate(
+    growth_capital = ifelse(year <= 2015, 0.43 * (rnna_pc / lag(rnna_pc) - 1) * 100, 0.44 * (rnna_pc / lag(rnna_pc) - 1) * 100),
+    growth_tfp = (rtfpna / lag(rtfpna) - 1) * 100,
+    growth_output = (rgdpna_pc / lag(rgdpna_pc) - 1) * 100
+  ) %>%
+  select(year, growth_capital, growth_tfp, growth_output) %>%
+  mutate(
+    across(
+      -year,
+      ~ if (is.numeric(.x)) round(.x, 2)
+    )
+  )
+
+pwt_growth %>%
+  pivot_longer(
+    cols = -c(year, max_contributor), values_to = "value", names_to = "indicator"
+  ) %>%
+  ggplot(aes(x = year, y = value, colour = indicator)) +
+  geom_line() +
+  geom_point(alpha = 0.2, size = 1) +
+  theme_minimal() +
+  labs(
+    title = "Growth Accounting for Ireland (1970-2021)",
+    y = "Growth Rate (%)",
+    x = "Year"
+  ) 
+
+pwt_growth_pc %>%
+  pivot_longer(
+    cols = -year, values_to = "value", names_to = "indicator"
+  ) %>%
+  ggplot(aes(x = year, y = value, colour = indicator)) +
+  geom_line() +
+  geom_point(alpha = 0.2, size = 1) +
+  theme_minimal() +
+  labs(
+    title = "Per Capita Growth Accounting for Ireland (1970-2021)",
+    y = "Growth Rate (%)",
+    x = "Year"
+  ) 
+
+
+pwt_growth %>%
+  filter(year %% 5 == 0 & year != 1970 | year == 1971) %>%
+  kable(format = "markdown", booktabs = TRUE, caption = "Growth Accounting for Ireland (1970-2021)")
+
+pwt_growth_pc %>%
+  filter(year %% 5 == 0 & year != 1970 | year == 1971) %>%
+  kable(format = "markdown", booktabs = TRUE, caption = "Per Capita Growth Accounting for Ireland (1970-2021)")
+```
